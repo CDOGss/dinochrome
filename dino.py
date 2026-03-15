@@ -42,7 +42,7 @@ code_jeu_html = """
             w: dinoNormal.w, 
             h: dinoNormal.h, 
             vitesseY: 0, 
-            gravite: 0.8, 
+            gravite: 0.6, 
             enSaut: false, 
             enBaisse: false 
         };
@@ -93,7 +93,7 @@ code_jeu_html = """
             dino = { x: 50, y: SOL - 60, w: dinoNormal.w, h: dinoNormal.h, vitesseY: 0, gravite: 0.8, enSaut: false, enBaisse: false };
             obstacles = [];
             score = 0;
-            vitesseJeu = 7.0;
+            vitesseJeu = 3.0;
             frames = 0;
             enCours = true;
             boucleJeu();
