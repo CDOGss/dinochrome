@@ -1,227 +1,219 @@
-import pygame
-import random
-import sys
-import os
+import streamlit as st
+import streamlit.components.v1 as components
 
-pygame.init()
+st.set_page_config(page_title="Dino Streamlit", page_icon="🦖")
 
-# Dimensions de la fenêtre
-LARGEUR = 800
-HAUTEUR = 400
-ecran = pygame.display.set_mode((LARGEUR, HAUTEUR))
-pygame.display.set_caption("Dino Chrome - Vitesse et Ptérodactyles")
+st.title("🦖 Le Jeu du T-Rex - Version Complète")
+st.write("Cliquez sur le jeu ci-dessous. Utilisez la touche **Espace** ou **Flèche Haut** pour sauter, et **Flèche Bas** pour vous baisser !")
 
-BLANC = (255, 255, 255)
-NOIR = (0, 0, 0)
-ROUGE = (200, 0, 0) # Couleur de secours pour le ptérodactyle
-BLEU = (0, 0, 200)  # Couleur de secours pour le dino baissé
+# Code HTML/JS/CSS du jeu complet
+code_jeu_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; background-color: #f0f2f6; font-family: sans-serif; }
+        canvas { background-color: white; border: 2px solid #333; box-shadow: 2px 2px 10px rgba(0,0,0,0.1); border-radius: 5px; outline: none; }
+    </style>
+</head>
+<body>
+    <div>
+        <canvas id="gameCanvas" width="800" height="400" tabindex="1"></canvas>
+    </div>
 
-FPS = 60
-horloge = pygame.time.Clock()
-
-# --- CHARGEMENT SÉCURISÉ DES IMAGES ---
-images_actives = True
-try:
-    img_dino = pygame.transform.scale(pygame.image.load("dino.png").convert_alpha(), (40, 60))
-    img_dino_baisse = pygame.transform.scale(pygame.image.load("dino_baisse.png").convert_alpha(), (55, 30))
-    img_cactus_base = pygame.image.load("cactus.png").convert_alpha()
-    img_ptera = pygame.transform.scale(pygame.image.load("ptera.png").convert_alpha(), (40, 30))
-except FileNotFoundError:
-    images_actives = False
-    print("\n[ATTENTION] Images manquantes (dino_baisse.png, ptera.png, etc.).")
-    print("Le jeu utilisera des blocs de couleur en attendant.\n")
-
-class Dino:
-    def __init__(self):
-        self.largeur_normale = 40
-        self.hauteur_normale = 60
-        self.largeur_baisse = 55
-        self.hauteur_baisse = 30
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
         
-        self.largeur = self.largeur_normale
-        self.hauteur = self.hauteur_normale
-        self.x = 50
-        self.y_sol = HAUTEUR - 20
-        self.y = self.y_sol - self.hauteur
-        
-        self.vitesse_y = 0
-        self.gravite = 0.8
-        self.en_saut = False
-        self.en_baisse = False
+        canvas.focus();
+        canvas.addEventListener('click', () => canvas.focus());
 
-    def sauter(self):
-        # On ne peut sauter que si on n'est pas déjà en l'air et qu'on n'est pas baissé
-        if not self.en_saut and not self.en_baisse:
-            self.vitesse_y = -15
-            self.en_saut = True
+        // Paramètres du jeu
+        const HAUTEUR = canvas.height;
+        const LARGEUR = canvas.width;
+        const SOL = HAUTEUR - 20;
 
-    def baisser(self, etat):
-        # On ne peut se baisser que si on est au sol
-        if not self.en_saut:
-            self.en_baisse = etat
-            if self.en_baisse:
-                self.hauteur = self.hauteur_baisse
-                self.largeur = self.largeur_baisse
-            else:
-                self.hauteur = self.hauteur_normale
-                self.largeur = self.largeur_normale
-            
-            # Ajuster la position Y pour rester collé au sol
-            self.y = self.y_sol - self.hauteur
+        // Variables Dino
+        const dinoNormal = { w: 40, h: 60 };
+        const dinoBaisse = { w: 55, h: 30 };
+        let dino = { 
+            x: 50, 
+            y: SOL - 60, 
+            w: dinoNormal.w, 
+            h: dinoNormal.h, 
+            vitesseY: 0, 
+            gravite: 0.8, 
+            enSaut: false, 
+            enBaisse: false 
+        };
 
-    def mettre_a_jour(self):
-        self.vitesse_y += self.gravite
-        self.y += self.vitesse_y
+        // Variables de partie
+        let obstacles = [];
+        let score = 0;
+        let vitesseJeu = 7.0;
+        const vitesseMax = 18.0;
+        const acceleration = 0.003;
+        let frames = 0;
+        let enCours = true;
 
-        if self.y >= self.y_sol - self.hauteur:
-            self.y = self.y_sol - self.hauteur
-            self.vitesse_y = 0
-            self.en_saut = False
+        // Contrôles (Appui)
+        canvas.addEventListener("keydown", function(event) {
+            if (["Space", "ArrowUp", "ArrowDown"].includes(event.code)) {
+                event.preventDefault(); // Empêche le défilement de la page
+            }
+            if (!enCours && (event.code === "Space" || event.code === "ArrowUp")) {
+                reinitialiserJeu();
+                return;
+            }
+            if (enCours) {
+                if ((event.code === "Space" || event.code === "ArrowUp") && !dino.enSaut && !dino.enBaisse) {
+                    dino.vitesseY = -15;
+                    dino.enSaut = true;
+                }
+                if (event.code === "ArrowDown" && !dino.enSaut) {
+                    dino.enBaisse = true;
+                    dino.w = dinoBaisse.w;
+                    dino.h = dinoBaisse.h;
+                    dino.y = SOL - dino.h;
+                }
+            }
+        });
 
-    def dessiner(self, surface):
-        if images_actives:
-            image_actuelle = img_dino_baisse if self.en_baisse else img_dino
-            surface.blit(image_actuelle, (self.x, self.y))
-        else:
-            couleur = BLEU if self.en_baisse else NOIR
-            pygame.draw.rect(surface, couleur, (self.x, self.y, self.largeur, self.hauteur))
+        // Contrôles (Relâchement)
+        canvas.addEventListener("keyup", function(event) {
+            if (event.code === "ArrowDown") {
+                dino.enBaisse = false;
+                dino.w = dinoNormal.w;
+                dino.h = dinoNormal.h;
+                dino.y = SOL - dino.h;
+            }
+        });
 
-    def get_rect(self):
-        # On réduit légèrement la hitbox (boîte de collision) pour que le jeu soit moins punitif
-        return pygame.Rect(self.x + 5, self.y + 5, self.largeur - 10, self.hauteur - 10)
+        function reinitialiserJeu() {
+            dino = { x: 50, y: SOL - 60, w: dinoNormal.w, h: dinoNormal.h, vitesseY: 0, gravite: 0.8, enSaut: false, enBaisse: false };
+            obstacles = [];
+            score = 0;
+            vitesseJeu = 7.0;
+            frames = 0;
+            enCours = true;
+            boucleJeu();
+        }
 
-class Obstacle:
-    def __init__(self, type_obstacle):
-        self.type = type_obstacle
-        self.x = LARGEUR
-        
-        if self.type == "cactus":
-            self.hauteur = random.randint(30, 70)
-            self.largeur = 20
-            self.y = HAUTEUR - 20 - self.hauteur
-            if images_actives:
-                self.image = pygame.transform.scale(img_cactus_base, (self.largeur, self.hauteur))
+        function detecterCollision(rect1, rect2) {
+            // Hitbox légèrement réduite pour être moins punitif
+            const marge = 5;
+            return (
+                rect1.x + marge < rect2.x + rect2.w &&
+                rect1.x + rect1.w - marge > rect2.x &&
+                rect1.y + marge < rect2.y + rect2.h &&
+                rect1.y + rect1.h - marge > rect2.y
+            );
+        }
+
+        function boucleJeu() {
+            if (!enCours) return;
+
+            // --- PHYSIQUE DU DINO ---
+            dino.vitesseY += dino.gravite;
+            dino.y += dino.vitesseY;
+
+            if (dino.y >= SOL - dino.h) {
+                dino.y = SOL - dino.h;
+                dino.vitesseY = 0;
+                dino.enSaut = false;
+            }
+
+            // --- VITESSE GLOBALE ---
+            if (vitesseJeu < vitesseMax) {
+                vitesseJeu += acceleration;
+            }
+
+            // --- GESTION DES OBSTACLES ---
+            frames++;
+            let limiteApparition = Math.floor(120 / (vitesseJeu / 5)); // Les obstacles apparaissent plus vite avec la vitesse
+
+            if (frames > limiteApparition + Math.random() * 50) {
+                // S'il y a assez de score, 30% de chance d'avoir un oiseau
+                if (score > 200 && Math.random() < 0.3) {
+                    let hauteursPtera = [HAUTEUR - 110, HAUTEUR - 65, HAUTEUR - 40];
+                    let hauteurChoisie = hauteursPtera[Math.floor(Math.random() * hauteursPtera.length)];
+                    obstacles.push({ type: "ptera", x: LARGEUR, y: hauteurChoisie, w: 40, h: 30 });
+                } else {
+                    let hauteurCactus = 30 + Math.random() * 40;
+                    obstacles.push({ type: "cactus", x: LARGEUR, y: SOL - hauteurCactus, w: 20, h: hauteurCactus });
+                }
+                frames = 0;
+            }
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obs = obstacles[i];
+                obs.x -= vitesseJeu;
                 
-        elif self.type == "ptera":
-            self.largeur = 40
-            self.hauteur = 30
-            # Le ptérodactyle peut apparaître à 3 hauteurs : haut, moyen (nécessite de se baisser), bas (nécessite de sauter)
-            hauteurs_possibles = [HAUTEUR - 110, HAUTEUR - 65, HAUTEUR - 40]
-            self.y = random.choice(hauteurs_possibles)
-            if images_actives:
-                self.image = img_ptera
+                // Les ptérodactyles sont un peu plus rapides
+                if (obs.type === "ptera") obs.x -= 1;
 
-    def mettre_a_jour(self, vitesse_jeu):
-        # L'obstacle recule à la vitesse globale du jeu
-        self.x -= vitesse_jeu
-        
-        # Les ptérodactyles volent un peu plus vite que les cactus
-        if self.type == "ptera":
-             self.x -= 1 
+                // Suppression et score
+                if (obs.x + obs.w < 0) {
+                    obstacles.splice(i, 1);
+                    score += 10;
+                }
 
-    def dessiner(self, surface):
-        if images_actives:
-            surface.blit(self.image, (self.x, self.y))
-        else:
-            couleur = NOIR if self.type == "cactus" else ROUGE
-            pygame.draw.rect(surface, couleur, (self.x, self.y, self.largeur, self.hauteur))
+                // Collision
+                if (detecterCollision(dino, obs)) {
+                    enCours = false;
+                }
+            }
+
+            // --- DESSIN ---
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-    def get_rect(self):
-        return pygame.Rect(self.x, self.y, self.largeur, self.hauteur)
+            // Ligne du sol
+            ctx.beginPath();
+            ctx.moveTo(0, SOL);
+            ctx.lineTo(LARGEUR, SOL);
+            ctx.strokeStyle = "black";
+            ctx.lineWidth = 2;
+            ctx.stroke();
 
-def jeu():
-    dino = Dino()
-    obstacles = []
-    score = 0
-    
-    # --- GESTION DE LA VITESSE ---
-    vitesse_jeu = 7.0 
-    vitesse_max = 18.0
-    acceleration = 0.003 # La vitesse augmente un tout petit peu à chaque image
-    
-    font = pygame.font.SysFont(None, 36)
-    compteur_apparition = 0
-    en_cours = True
+            // Dessin Dino (Bleu si baissé, Noir sinon)
+            ctx.fillStyle = dino.enBaisse ? "#0000C8" : "#000000";
+            ctx.fillRect(dino.x, dino.y, dino.w, dino.h);
 
-    while en_cours:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-                
-            # Quand on APPUIE sur une touche
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE or event.key == pygame.K_UP:
-                    dino.sauter()
-                if event.key == pygame.K_DOWN:
-                    dino.baisser(True)
-                    
-            # Quand on RELÂCHE une touche
-            if event.type == pygame.KEYUP:
-                if event.key == pygame.K_DOWN:
-                    dino.baisser(False)
+            // Dessin Obstacles
+            obstacles.forEach(obs => {
+                if (obs.type === "cactus") {
+                    ctx.fillStyle = "#228B22"; // Vert
+                    ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                } else {
+                    ctx.fillStyle = "#C80000"; // Rouge
+                    ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+                }
+            });
 
-        # Mise à jour du dinosaure
-        dino.mettre_a_jour()
+            // Textes (Score et Vitesse)
+            ctx.fillStyle = "black";
+            ctx.font = "bold 20px Arial";
+            ctx.fillText("Score: " + Math.floor(score), 20, 30);
+            ctx.font = "16px Arial";
+            ctx.fillText("Vitesse: " + Math.floor(vitesseJeu), 20, 55);
 
-        # Augmentation progressive de la vitesse globale
-        if vitesse_jeu < vitesse_max:
-            vitesse_jeu += acceleration
+            // Écran de fin
+            if (!enCours) {
+                ctx.fillStyle = "black";
+                ctx.font = "bold 30px Arial";
+                ctx.fillText("Game Over !", LARGEUR / 2 - 90, HAUTEUR / 2 - 20);
+                ctx.font = "20px Arial";
+                ctx.fillText("Appuyez sur ESPACE pour rejouer", LARGEUR / 2 - 160, HAUTEUR / 2 + 20);
+            } else {
+                requestAnimationFrame(boucleJeu);
+            }
+        }
 
-        # Génération aléatoire des obstacles (qui dépend maintenant de la vitesse)
-        compteur_apparition += 1
-        # Plus le jeu va vite, plus les obstacles doivent apparaître rapidement
-        limite_apparition = random.randint(int(600/vitesse_jeu), int(1200/vitesse_jeu))
-        
-        if compteur_apparition > limite_apparition:
-            # S'il y a assez de score, on a 30% de chance d'avoir un oiseau, 70% un cactus
-            if score > 200 and random.randint(1, 100) <= 30:
-                obstacles.append(Obstacle("ptera"))
-            else:
-                obstacles.append(Obstacle("cactus"))
-            compteur_apparition = 0
+        // Lancement initial
+        boucleJeu();
+    </script>
+</body>
+</html>
+"""
 
-        # Mise à jour et nettoyage des obstacles
-        for obs in obstacles:
-            obs.mettre_a_jour(vitesse_jeu)
-            if obs.x < -obs.largeur:
-                obstacles.remove(obs)
-                score += 10 
-
-        # Vérification des collisions
-        dino_rect = dino.get_rect()
-        for obs in obstacles:
-            if dino_rect.colliderect(obs.get_rect()):
-                en_cours = False 
-
-        # Dessin
-        ecran.fill(BLANC)
-        pygame.draw.line(ecran, NOIR, (0, HAUTEUR - 20), (LARGEUR, HAUTEUR - 20), 2)
-        
-        dino.dessiner(ecran)
-        for obs in obstacles:
-            obs.dessiner(ecran)
-
-        # Affichage du score
-        texte_score = font.render(f"Score: {int(score)}  |  Vitesse: {int(vitesse_jeu)}", True, NOIR)
-        ecran.blit(texte_score, (10, 10))
-
-        pygame.display.flip()
-        horloge.tick(FPS)
-
-    # Écran de fin
-    texte_fin = font.render("Game Over ! Appuyez sur ESPACE pour rejouer", True, NOIR)
-    ecran.blit(texte_fin, (LARGEUR//2 - 270, HAUTEUR//2))
-    pygame.display.flip()
-    
-    attente = True
-    while attente:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            if event.type == pygame.KEYDOWN and (event.key == pygame.K_SPACE or event.key == pygame.K_UP):
-                jeu()
-
-if __name__ == "__main__":
-    jeu()
+components.html(code_jeu_html, height=450)
