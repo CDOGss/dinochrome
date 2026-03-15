@@ -50,7 +50,7 @@ code_jeu_html = """
         // Variables de partie
         let obstacles = [];
         let score = 0;
-        let vitesseJeu = 7.0;
+        let vitesseJeu = 3.0;
         const vitesseMax = 18.0;
         const acceleration = 0.003;
         let frames = 0;
